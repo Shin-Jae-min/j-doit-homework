@@ -5,3 +5,4 @@ azure-cognitiveservices-speech
 gspread
 oauth2client
 pydub
+pyaudioop
