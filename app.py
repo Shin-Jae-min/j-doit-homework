@@ -21,8 +21,15 @@ if 'hw_manager' not in st.session_state:
     st.session_state.hw_manager = HomeworkManager()
 
 # Azure Config
+# Azure Config
 AZURE_KEY = os.getenv("AZURE_SPEECH_KEY")
 AZURE_REGION = os.getenv("AZURE_SPEECH_REGION")
+
+# Fallback to Streamlit Secrets if env vars are missing
+if not AZURE_KEY and "AZURE_SPEECH_KEY" in st.secrets:
+    AZURE_KEY = st.secrets["AZURE_SPEECH_KEY"]
+if not AZURE_REGION and "AZURE_SPEECH_REGION" in st.secrets:
+    AZURE_REGION = st.secrets["AZURE_SPEECH_REGION"]
 
 # 2. Sidebar - User Login
 st.sidebar.title("🔐 로그인")

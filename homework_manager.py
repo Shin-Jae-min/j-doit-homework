@@ -25,10 +25,19 @@ class HomeworkManager:
 
     def connect(self):
         try:
-            logging.info(f"Connecting to Google Sheet with key: {self.key_file}")
-            creds = ServiceAccountCredentials.from_json_keyfile_name(self.key_file, self.scope)
+            if os.path.exists(self.key_file):
+                logging.info(f"Connecting to Google Sheet with key: {self.key_file}")
+                creds = ServiceAccountCredentials.from_json_keyfile_name(self.key_file, self.scope)
+            else:
+                # Fallback: Try Streamlit Secrets (for Cloud Deployment)
+                logging.info("Key file not found. Trying Streamlit Secrets...")
+                import streamlit as st
+                # Convert the specific secrets section to a dict for oauth2client
+                key_dict = dict(st.secrets["gcp_service_account"])
+                creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, self.scope)
+
             self.client = gspread.authorize(creds)
-            # Use get_worksheet(0) to always open the first sheet regardless of its name (e.g., '시트1')
+            # Use get_worksheet(0) to always open the first sheet regardless of its name
             self.sheet = self.client.open(self.sheet_name).get_worksheet(0)
             logging.info("Connected to Google Sheet")
         except Exception as e:

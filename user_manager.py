@@ -29,10 +29,17 @@ class UserManager:
 
     def connect_sheet(self):
         try:
-            creds = ServiceAccountCredentials.from_json_keyfile_name(self.key_file, self.scope)
+            if os.path.exists(self.key_file):
+                logging.info(f"Connecting to Users Sheet with key: {self.key_file}")
+                creds = ServiceAccountCredentials.from_json_keyfile_name(self.key_file, self.scope)
+            else:
+                # Fallback: Try Streamlit Secrets (for Cloud Deployment)
+                import streamlit as st
+                key_dict = dict(st.secrets["gcp_service_account"])
+                creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, self.scope)
+                
             self.client = gspread.authorize(creds)
             # Open the 'Users' worksheet
-            # Note: User must create a tab named "Users"
             self.sheet = self.client.open(self.sheet_name).worksheet("Users")
         except Exception as e:
             logging.error(f"Failed to connect to Users sheet: {e}")
