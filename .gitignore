@@ -1,0 +1,25 @@
+
+# Environment Variables (SENSITIVE - DO NOT UPLOAD)
+.env
+service_account.json
+
+# Local Data
+users.json
+users.txt
+cf.log
+cf_new.log
+tunnel.log
+*.log
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Audio Files (Temp)
+*.wav
+*.mp3
+*.ogg
+
+# OS specific
+.DS_Store
+Thumbs.db
