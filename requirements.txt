@@ -1,8 +1,5 @@
-streamlit
+streamlit>=1.40.0
 python-dotenv
-streamlit-audiorecorder
 azure-cognitiveservices-speech
 gspread
 oauth2client
-pydub
-pyaudioop

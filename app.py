@@ -4,7 +4,7 @@ import os
 import tempfile
 import time
 from dotenv import load_dotenv
-from audiorecorder import audiorecorder
+import subprocess
 from homework_manager import HomeworkManager
 from user_manager import UserManager
 from grader import AzureGrader
@@ -83,16 +83,30 @@ st.divider()
 st.subheader("🎙️ 녹음 및 평가")
 st.write("위 문장 중 하나를 골라 읽어주세요.")
 
-audio = audiorecorder("녹음 시작", "녹음 중지")
+audio_value = st.audio_input("녹음하기 (마이크 아이콘 클릭)")
 
-if len(audio) > 0:
-    # To play audio in frontend:
-    # st.audio(audio.export().read())  
-
-    # Save to temp wav file
+if audio_value:
+    # Save raw audio to temp file
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_audio:
-        audio.export(tmp_audio.name, format="wav")
-        tmp_filename = tmp_audio.name
+        tmp_audio.write(audio_value.read())
+        raw_path = tmp_audio.name
+
+    # Convert to 16k Mono WAV using ffmpeg (Azure requirement)
+    # We use a second temp file for the converted output
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as converted_audio:
+        tmp_filename = converted_audio.name
+    
+    # Run ffmpeg
+    # -i input -ac 1 (mono) -ar 16000 (16k sample rate) output -y (overwrite)
+    try:
+        subprocess.run(["ffmpeg", "-i", raw_path, "-ac", "1", "-ar", "16000", tmp_filename, "-y"], check=True)
+    except Exception as e:
+        st.error(f"Audio conversion failed: {e}")
+        tmp_filename = raw_path # Fallback to raw (might fail grading but better than crash)
+    finally:
+        # Clean up raw file
+        if os.path.exists(raw_path):
+            os.remove(raw_path)
 
     # Grade
     if not AZURE_KEY or not AZURE_REGION:
