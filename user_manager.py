@@ -70,6 +70,25 @@ class UserManager:
         except Exception as e:
             logging.error(f"Sheet Sync Error for {user_id}: {e}")
 
+    def update_user_score(self, chat_id, score):
+        """Updates the user's score in the linked Google Sheet (Column D)."""
+        if not self.client:
+            self.connect_sheet()
+        if not self.sheet:
+            return
+
+        try:
+            str_id = str(chat_id)
+            cell = self.sheet.find(str_id)
+            if cell:
+                # Update Score (Column 4)
+                self.sheet.update_cell(cell.row, 4, str(score))
+            else:
+                logging.warning(f"User {str_id} not found in sheet for score update.")
+                
+        except Exception as e:
+            logging.error(f"Failed to update score for {chat_id}: {e}")
+
     def load_users(self):
         if not os.path.exists(self.db_file):
             return {}
