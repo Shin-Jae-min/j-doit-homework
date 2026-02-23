@@ -21,7 +21,6 @@ if 'hw_manager' not in st.session_state:
     st.session_state.hw_manager = HomeworkManager()
 
 # Azure Config
-# Azure Config
 AZURE_KEY = os.getenv("AZURE_SPEECH_KEY")
 AZURE_REGION = os.getenv("AZURE_SPEECH_REGION")
 
@@ -45,12 +44,6 @@ if user_id:
     
     st.sidebar.success(f"환영합니다! \n현재 진도: **Day {current_day}**")
     
-    # Reset Day Button (For Testing)
-    # if st.sidebar.button("진도 초기화 (Test)"):
-    #     st.session_state.user_manager.users[str(user_id)]['current_day'] = 1
-    #     st.session_state.user_manager.save_users()
-    #     st.experimental_rerun()
-
 else:
     st.title("🎤 J-DoIt 스피킹 연습장")
     st.info("👈 왼쪽 사이드바에 ID를 입력하여 로그인해주세요.")
@@ -92,19 +85,15 @@ if audio_value:
         raw_path = tmp_audio.name
 
     # Convert to 16k Mono WAV using ffmpeg (Azure requirement)
-    # We use a second temp file for the converted output
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as converted_audio:
         tmp_filename = converted_audio.name
     
-    # Run ffmpeg
-    # -i input -ac 1 (mono) -ar 16000 (16k sample rate) output -y (overwrite)
     try:
         subprocess.run(["ffmpeg", "-i", raw_path, "-ac", "1", "-ar", "16000", tmp_filename, "-y"], check=True)
     except Exception as e:
         st.error(f"Audio conversion failed: {e}")
-        tmp_filename = raw_path # Fallback to raw (might fail grading but better than crash)
+        tmp_filename = raw_path # Fallback
     finally:
-        # Clean up raw file
         if os.path.exists(raw_path):
             os.remove(raw_path)
 
@@ -140,8 +129,6 @@ if audio_value:
                 
                 # Update User Score & Progress
                 st.session_state.user_manager.update_user_score(user_id, final_score)
-                # Auto-advance day if score is good enough? (Optional, let's keep it manual or simple for now)
-                # let's advance anyway for homework completion
                 st.session_state.user_manager.advance_user_day(user_id)
                 
                 # UI Result
@@ -172,4 +159,5 @@ if audio_value:
                 st.error(f"평가 실패: {res.get('message')}")
             
     # Cleanup
-    os.remove(tmp_filename)
+    if os.path.exists(tmp_filename):
+        os.remove(tmp_filename)

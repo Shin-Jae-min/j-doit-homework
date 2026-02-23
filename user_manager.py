@@ -30,7 +30,6 @@ class UserManager:
     def connect_sheet(self):
         try:
             if os.path.exists(self.key_file):
-                logging.info(f"Connecting to Users Sheet with key: {self.key_file}")
                 creds = ServiceAccountCredentials.from_json_keyfile_name(self.key_file, self.scope)
             else:
                 # Fallback: Try Streamlit Secrets (for Cloud Deployment)
