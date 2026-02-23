@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import subprocess
 from homework_manager import HomeworkManager
 from user_manager import UserManager
-from grader import AzureGrader
+from azure_stt import AzureGrader
 import difflib
 
 # 1. Init & Config

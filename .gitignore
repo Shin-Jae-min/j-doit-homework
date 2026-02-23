@@ -23,3 +23,15 @@ __pycache__/
 # OS specific
 .DS_Store
 Thumbs.db
+
+# Secrets
+streamlit_secrets.txt
+.env
+service_account.json
+push_err.txt
+push_error.log
+url.txt
+tunnel.log
+cf.log
+cf_new.log
+cf_log.txt

@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 from pydub import AudioSegment
-from grader import AzureGrader
+from azure_stt import AzureGrader
 import tempfile
 
 # Configure Logging
