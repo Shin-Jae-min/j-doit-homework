@@ -31,67 +31,45 @@ class HomeworkManager:
         """Connects to Google Sheets using either st.secrets or a local JSON key file."""
         if self.client is None:
             creds_info = None
-            
-            # 1. Try to load from Streamlit Secrets
             try:
                 import streamlit as st
-                # Option A: [gcp_service_account] header used
+                # 1. Standard approach that usually works in Streamlit Cloud
                 if "gcp_service_account" in st.secrets:
-                    raw_creds = st.secrets["gcp_service_account"]
-                    # If it's already a dict/mapped object (standard Streamlit behavior)
-                    if hasattr(raw_creds, "to_dict"):
-                        creds_info = raw_creds.to_dict()
-                    elif isinstance(raw_creds, dict):
-                        creds_info = raw_creds
-                    # If the user pasted the JSON string itself inside the field
-                    elif isinstance(raw_creds, str):
-                        try:
-                            creds_info = json.loads(raw_creds)
-                        except:
-                            creds_info = {"private_key": raw_creds} # Just in case
-                
-                # Option B: Individual keys pasted without header
+                    creds_info = st.secrets["gcp_service_account"]
+                # 2. Fallback to flat secrets
                 elif "private_key" in st.secrets:
                     creds_info = dict(st.secrets)
-            except Exception as e:
-                print(f"DEBUG: st.secrets access failed: {e}")
+            except:
+                pass
 
-            # 2. Fallback to local service_account.json (for Bot environment)
-            if not creds_info or not creds_info.get("private_key"):
-                key_path = "service_account.json"
-                if os.path.exists(key_path):
-                    try:
-                        with open(key_path, "r", encoding="utf-8") as f:
-                            creds_info = json.load(f)
-                    except:
-                        pass
+            # 3. Fallback to local file (for Bot environment)
+            if not creds_info:
+                if os.path.exists("service_account.json"):
+                    with open("service_account.json", "r") as f:
+                        creds_info = json.load(f)
 
-            # Validation & Connection
             try:
-                # Extra safety: filter out None values and check for required fields specifically
-                creds_info = {k: v for k, v in creds_info.items() if v is not None}
-                
-                required_fields = ["project_id", "private_key", "client_email", "private_key_id"]
-                missing = [f for f in required_fields if f not in creds_info or not creds_info.get(f)]
-                if missing:
-                    raise ValueError(f"Missing required credential fields in Secrets: {', '.join(missing)}. Please verify your service_account.json content is correctly pasted into Streamlit Secrets.")
+                if not creds_info:
+                    raise ValueError("Credentials not found in st.secrets or service_account.json")
 
-                # Auto-fix for common Streamlit Secrets newline escaping issue
-                if "private_key" in creds_info and isinstance(creds_info["private_key"], str):
-                    creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
+                # Robust fix for the PEM error: ensure private_key is clean
+                if isinstance(creds_info, (dict, st.secrets.SecretBox)) or hasattr(creds_info, "get"):
+                    # We need a mutable dict to fix the key
+                    creds_dict = {k: creds_info[k] for k in creds_info.keys()}
+                    k = creds_dict.get("private_key", "")
+                    if isinstance(k, str):
+                        # Convert literal '\n' and ensure it ends with a newline
+                        creds_dict["private_key"] = k.replace("\\n", "\n").strip() + "\n"
+                    creds_info = creds_dict
 
                 creds = service_account.Credentials.from_service_account_info(
                     creds_info, scopes=self.scope
                 )
                 self.client = gspread.authorize(creds)
                 self.sheet = self.client.open(self.sheet_name).get_worksheet(0)
+                print(f"DEBUG: Successfully connected to {self.sheet_name}")
             except Exception as e:
-                error_msg = f"Spreadsheet connection failed: {e}"
-                try:
-                    import streamlit as st
-                    st.error(error_msg)
-                except:
-                    print(error_msg)
+                print(f"DEBUG: Connection failed: {e}")
                 raise e
 
     def get_user_info(self, user_id):
@@ -111,8 +89,11 @@ class HomeworkManager:
         try:
             homework_sheet = self.client.open(self.sheet_name).worksheet("Homework")
             all_homework = homework_sheet.get_all_records()
-            day_homework = [row for row in all_homework if str(row.get('day')) == str(day)]
+            print(f"DEBUG: Found {len(all_homework)} total homework rows.")
+            
+            day_homework = [row for row in all_homework if str(row.get('day')).strip() == str(day).strip()]
+            print(f"DEBUG: Found {len(day_homework)} rows for Day {day}")
             return day_homework
         except Exception as e:
-            print(f"Error fetching homework for day {day}: {e}")
+            print(f"DEBUG: Error in get_homework: {e}")
             return []
