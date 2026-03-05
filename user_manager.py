@@ -4,75 +4,107 @@ import os
 import datetime
 import logging
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-import glob
+from google.oauth2 import service_account
+from dotenv import load_dotenv
+
+# Load env file for standalone/bot usage
+load_dotenv()
 
 class UserManager:
-    def __init__(self, db_file="users.json", key_file="service_account.json", sheet_name="JDoIt_Homework"):
+    def __init__(self, db_file="users.json", key_file="service_account.json"):
         self.db_file = db_file
         self.users = self.load_users()
         
-        # Google Sheet Setup
+        # Google Sheet Config
         self.key_file = key_file
-        self.sheet_name = sheet_name
-        self.scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        self.scope = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
         self.client = None
         self.sheet = None
         
-        # Determine strict key file path (borrowed from HomeworkManager logic)
-        if not os.path.exists(self.key_file):
-            json_files = glob.glob("*.json")
-            for f in json_files:
-                if "client" not in f and "package" not in f and "tsconfig" not in f and "users" not in f:
-                     self.key_file = f
-                     break
+        # 1. Check environment variable first (for Bot)
+        # 2. Then check Streamlit secrets (for Web)
+        self.sheet_name = os.getenv("SHEET_NAME")
+        if not self.sheet_name:
+            try:
+                import streamlit as st
+                self.sheet_name = st.secrets.get("SHEET_NAME", "JDoit_Homework")
+            except:
+                self.sheet_name = "JDoit_Homework"
 
     def connect_sheet(self):
-        try:
-            if os.path.exists(self.key_file):
-                creds = ServiceAccountCredentials.from_json_keyfile_name(self.key_file, self.scope)
-            else:
-                # Fallback: Try Streamlit Secrets (for Cloud Deployment)
+        """Connects to 'Users' worksheet using st.secrets or local key file."""
+        if self.client is None:
+            creds_info = None
+            
+            # 1. Try Streamlit Secrets
+            try:
                 import streamlit as st
-                key_dict = dict(st.secrets["gcp_service_account"])
-                creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, self.scope)
-                
-            self.client = gspread.authorize(creds)
-            # Open the 'Users' worksheet
-            self.sheet = self.client.open(self.sheet_name).worksheet("Users")
-        except Exception as e:
-            logging.error(f"Failed to connect to Users sheet: {e}")
-            self.sheet = None
+                if "gcp_service_account" in st.secrets:
+                    creds_info = st.secrets["gcp_service_account"]
+                else:
+                    # Try flat secrets
+                    creds_info = {
+                        "type": st.secrets.get("type"),
+                        "project_id": st.secrets.get("project_id"),
+                        "private_key_id": st.secrets.get("private_key_id"),
+                        "private_key": st.secrets.get("private_key"),
+                        "client_email": st.secrets.get("client_email"),
+                        "client_id": st.secrets.get("client_id"),
+                        "auth_uri": st.secrets.get("auth_uri"),
+                        "token_uri": st.secrets.get("token_uri"),
+                        "auth_provider_x509_cert_url": st.secrets.get("auth_provider_x509_cert_url"),
+                        "client_x509_cert_url": st.secrets.get("client_x509_cert_url")
+                    }
+            except:
+                pass
+
+            # 2. Fallback to local file
+            if not creds_info or not creds_info.get("private_key"):
+                if os.path.exists(self.key_file):
+                    try:
+                        with open(self.key_file, "r", encoding="utf-8") as f:
+                            creds_info = json.load(f)
+                    except Exception as e:
+                        logging.error(f"Failed to read key file: {e}")
+
+            # Validation & Connection
+            try:
+                if not creds_info or not creds_info.get("private_key"):
+                    logging.warning("User Manager: No credentials found for Google Sheets.")
+                    return
+
+                creds = service_account.Credentials.from_service_account_info(
+                    creds_info, scopes=self.scope
+                )
+                self.client = gspread.authorize(creds)
+                # Open the 'Users' worksheet
+                self.sheet = self.client.open(self.sheet_name).worksheet("Users")
+            except Exception as e:
+                logging.error(f"User Manager connection failed: {e}")
+                self.sheet = None
 
     def sync_to_sheet(self, user_id, current_day, last_updated):
         """Sync a single user's status to Google Sheet."""
-        if not self.client:
-            self.connect_sheet()
-        
+        self.connect_sheet()
         if not self.sheet:
             return
 
         try:
-            # 1. Check if user exists
-            # We assume user_id is in column 1
             cell = self.sheet.find(str(user_id))
-            
             if cell:
-                # Update existing row
-                # user_id(1), current_day(2), last_updated(3)
                 self.sheet.update_cell(cell.row, 2, current_day)
                 self.sheet.update_cell(cell.row, 3, last_updated)
             else:
-                # Append new row
                 self.sheet.append_row([str(user_id), current_day, last_updated])
-                
         except Exception as e:
             logging.error(f"Sheet Sync Error for {user_id}: {e}")
 
     def update_user_score(self, chat_id, score):
         """Updates the user's score in the linked Google Sheet (Column D)."""
-        if not self.client:
-            self.connect_sheet()
+        self.connect_sheet()
         if not self.sheet:
             return
 
@@ -80,11 +112,9 @@ class UserManager:
             str_id = str(chat_id)
             cell = self.sheet.find(str_id)
             if cell:
-                # Update Score (Column 4)
                 self.sheet.update_cell(cell.row, 4, str(score))
             else:
                 logging.warning(f"User {str_id} not found in sheet for score update.")
-                
         except Exception as e:
             logging.error(f"Failed to update score for {chat_id}: {e}")
 
@@ -106,7 +136,6 @@ class UserManager:
             logging.error(f"Failed to save users DB: {e}")
 
     def register_user(self, chat_id):
-        """Register a new user with Day 1 if not exists."""
         str_id = str(chat_id)
         if str_id not in self.users:
             today = datetime.date.today().isoformat()
@@ -115,7 +144,6 @@ class UserManager:
                 "last_homework_date": None
             }
             self.save_users()
-            # Initial Sync
             self.sync_to_sheet(str_id, 1, today)
             return True
         return False
@@ -125,18 +153,14 @@ class UserManager:
         return self.users.get(str_id, {"current_day": 1})
 
     def advance_user_day(self, chat_id):
-        """Update user's current day by +1 and set last_homework_date."""
         str_id = str(chat_id)
         if str_id in self.users:
             self.users[str_id]["current_day"] += 1
             today = datetime.date.today().isoformat()
             self.users[str_id]["last_homework_date"] = today
             self.save_users()
-            
-            # Sync to Sheet
             self.sync_to_sheet(str_id, self.users[str_id]["current_day"], today)
             return self.users[str_id]["current_day"]
         else:
-            # Auto-register if missing
             self.register_user(chat_id)
             return self.advance_user_day(chat_id)

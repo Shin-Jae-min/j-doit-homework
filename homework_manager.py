@@ -2,6 +2,11 @@ import streamlit as st
 import gspread
 from google.oauth2 import service_account
 import json
+import os
+from dotenv import load_dotenv
+
+# Load env file for standalone/bot usage
+load_dotenv()
 
 class HomeworkManager:
     def __init__(self):
@@ -11,58 +16,94 @@ class HomeworkManager:
         ]
         self.client = None
         self.sheet = None
-        # 시트 이름은 Secrets에서 가져오되, 없으면 기본값 사용
-        self.sheet_name = st.secrets.get("SHEET_NAME", "JDoit_Homework")
+        
+        # 1. Check environment variable first (for Bot)
+        # 2. Then check Streamlit secrets (for Web)
+        self.sheet_name = os.getenv("SHEET_NAME")
+        if not self.sheet_name:
+            try:
+                # Use secrets if available
+                self.sheet_name = st.secrets.get("SHEET_NAME", "JDoit_Homework")
+            except:
+                self.sheet_name = "JDoit_Homework"
 
     def connect(self):
-        """최신 google-auth 라이브러리를 사용하여 시트에 연결합니다."""
+        """Connects to Google Sheets using either st.secrets or a local JSON key file."""
         if self.client is None:
+            creds_info = None
+            
+            # 1. Try to load from Streamlit Secrets
             try:
-                creds_info = st.secrets["gcp_service_account"]
+                if "gcp_service_account" in st.secrets:
+                    creds_info = st.secrets["gcp_service_account"]
+                else:
+                    # Try flat secrets
+                    creds_info = {
+                        "type": st.secrets.get("type"),
+                        "project_id": st.secrets.get("project_id"),
+                        "private_key_id": st.secrets.get("private_key_id"),
+                        "private_key": st.secrets.get("private_key"),
+                        "client_email": st.secrets.get("client_email"),
+                        "client_id": st.secrets.get("client_id"),
+                        "auth_uri": st.secrets.get("auth_uri"),
+                        "token_uri": st.secrets.get("token_uri"),
+                        "auth_provider_x509_cert_url": st.secrets.get("auth_provider_x509_cert_url"),
+                        "client_x509_cert_url": st.secrets.get("client_x509_cert_url")
+                    }
+            except:
+                pass # Not in Streamlit or Secrets missing
+
+            # 2. Fallback to local service_account.json (for Bot environment)
+            if not creds_info or not creds_info.get("private_key"):
+                key_path = "service_account.json"
+                if os.path.exists(key_path):
+                    try:
+                        with open(key_path, "r", encoding="utf-8") as f:
+                            creds_info = json.load(f)
+                    except:
+                        pass
+
+            # Validation & Connection
+            try:
+                if not creds_info or not creds_info.get("private_key"):
+                    error_msg = "Google Sheets credentials not found in st.secrets or service_account.json."
+                    try:
+                        st.error(error_msg)
+                    except:
+                        print(f"Error: {error_msg}")
+                    return
+
                 creds = service_account.Credentials.from_service_account_info(
                     creds_info, scopes=self.scope
                 )
                 self.client = gspread.authorize(creds)
-                # 메인 시트(Users 정보가 있는 첫 번째 탭) 연결
                 self.sheet = self.client.open(self.sheet_name).get_worksheet(0)
             except Exception as e:
-                st.error(f"구글 시트 연결 실패: {e}")
+                try:
+                    st.error(f"Spreadsheet connection failed: {e}")
+                except:
+                    print(f"Spreadsheet connection failed: {e}")
                 raise e
 
     def get_user_info(self, user_id):
-        """사용자의 진도(Day) 정보를 가져옵니다."""
         self.connect()
-        records = self.sheet.get_all_records()
-        for record in records:
-            if str(record.get('user_id')) == str(user_id):
-                return record
+        if not self.sheet: return None
+        try:
+            records = self.sheet.get_all_records()
+            for record in records:
+                if str(record.get('user_id')) == str(user_id):
+                    return record
+        except Exception as e:
+            print(f"Error fetching user info: {e}")
         return None
 
     def get_homework(self, day):
-        """해당 Day에 맞는 숙제 목록을 'Homework' 탭에서 가져옵니다."""
         self.connect()
         try:
-            # 1. 'Homework'라는 이름의 탭을 엽니다.
             homework_sheet = self.client.open(self.sheet_name).worksheet("Homework")
             all_homework = homework_sheet.get_all_records()
-            
-            day_homework = []
-            for row in all_homework:
-                # 2. 시트의 'day' 열과 학생의 진도(day)가 일치하는 행만 골라담습니다.
-                if str(row.get('day')) == str(day):
-                    day_homework.append({
-                        "text": row.get('text'),
-                        "audio_url": row.get('audio_url')
-                    })
+            day_homework = [row for row in all_homework if str(row.get('day')) == str(day)]
             return day_homework
         except Exception as e:
-            st.error(f"숙제 데이터를 가져오는 중 오류 발생: {e}")
+            print(f"Error fetching homework for day {day}: {e}")
             return []
-
-    def update_last_active(self, user_id, date_str):
-        """마지막 활동 날짜를 업데이트합니다."""
-        self.connect()
-        cell = self.sheet.find(str(user_id))
-        if cell:
-            # 보통 C열(3번째 열)이 last_active 칸입니다.
-            self.sheet.update_cell(cell.row, 3, date_str)

@@ -9,8 +9,6 @@ from pydub import AudioSegment
 from azure_stt import AzureGrader
 from homework_manager import HomeworkManager
 from user_manager import UserManager
-from homework_manager import HomeworkManager
-from user_manager import UserManager
 import tempfile
 import difflib
 import pytz
