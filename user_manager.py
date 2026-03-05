@@ -43,11 +43,10 @@ class UserManager:
             try:
                 import streamlit as st
                 if "gcp_service_account" in st.secrets:
-                    creds_info = st.secrets["gcp_service_account"]
-                else:
-                    # Try flat secrets
+                    creds_info = dict(st.secrets["gcp_service_account"])
+                elif "private_key" in st.secrets:
                     creds_info = {
-                        "type": st.secrets.get("type"),
+                        "type": st.secrets.get("type", "service_account"),
                         "project_id": st.secrets.get("project_id"),
                         "private_key_id": st.secrets.get("private_key_id"),
                         "private_key": st.secrets.get("private_key"),
@@ -74,6 +73,12 @@ class UserManager:
             try:
                 if not creds_info or not creds_info.get("private_key"):
                     logging.warning("User Manager: No credentials found for Google Sheets.")
+                    return
+                
+                required_fields = ["project_id", "private_key", "client_email"]
+                missing = [f for f in required_fields if not creds_info.get(f)]
+                if missing:
+                    logging.error(f"User Manager: Missing credential fields: {', '.join(missing)}")
                     return
 
                 creds = service_account.Credentials.from_service_account_info(

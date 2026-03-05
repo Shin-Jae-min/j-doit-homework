@@ -34,12 +34,14 @@ class HomeworkManager:
             
             # 1. Try to load from Streamlit Secrets
             try:
+                import streamlit as st
+                # Option A: [gcp_service_account] header used
                 if "gcp_service_account" in st.secrets:
-                    creds_info = st.secrets["gcp_service_account"]
-                else:
-                    # Try flat secrets
+                    creds_info = dict(st.secrets["gcp_service_account"])
+                # Option B: Individual keys pasted without header
+                elif "private_key" in st.secrets:
                     creds_info = {
-                        "type": st.secrets.get("type"),
+                        "type": st.secrets.get("type", "service_account"),
                         "project_id": st.secrets.get("project_id"),
                         "private_key_id": st.secrets.get("private_key_id"),
                         "private_key": st.secrets.get("private_key"),
@@ -50,8 +52,8 @@ class HomeworkManager:
                         "auth_provider_x509_cert_url": st.secrets.get("auth_provider_x509_cert_url"),
                         "client_x509_cert_url": st.secrets.get("client_x509_cert_url")
                     }
-            except:
-                pass # Not in Streamlit or Secrets missing
+            except Exception as e:
+                print(f"DEBUG: st.secrets access failed: {e}")
 
             # 2. Fallback to local service_account.json (for Bot environment)
             if not creds_info or not creds_info.get("private_key"):
@@ -66,12 +68,13 @@ class HomeworkManager:
             # Validation & Connection
             try:
                 if not creds_info or not creds_info.get("private_key"):
-                    error_msg = "Google Sheets credentials not found in st.secrets or service_account.json."
-                    try:
-                        st.error(error_msg)
-                    except:
-                        print(f"Error: {error_msg}")
-                    return
+                    raise ValueError("No valid Google Sheets credentials found. Please check Secrets or service_account.json.")
+
+                # Extra safety: check for required fields specifically
+                required_fields = ["project_id", "private_key", "client_email"]
+                missing = [f for f in required_fields if not creds_info.get(f)]
+                if missing:
+                    raise ValueError(f"Missing required credential fields: {', '.join(missing)}")
 
                 creds = service_account.Credentials.from_service_account_info(
                     creds_info, scopes=self.scope
@@ -79,10 +82,12 @@ class HomeworkManager:
                 self.client = gspread.authorize(creds)
                 self.sheet = self.client.open(self.sheet_name).get_worksheet(0)
             except Exception as e:
+                error_msg = f"Spreadsheet connection failed: {e}"
                 try:
-                    st.error(f"Spreadsheet connection failed: {e}")
+                    import streamlit as st
+                    st.error(error_msg)
                 except:
-                    print(f"Spreadsheet connection failed: {e}")
+                    print(error_msg)
                 raise e
 
     def get_user_info(self, user_id):
