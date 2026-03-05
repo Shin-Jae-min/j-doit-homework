@@ -37,21 +37,22 @@ class HomeworkManager:
                 import streamlit as st
                 # Option A: [gcp_service_account] header used
                 if "gcp_service_account" in st.secrets:
-                    creds_info = dict(st.secrets["gcp_service_account"])
+                    raw_creds = st.secrets["gcp_service_account"]
+                    # If it's already a dict/mapped object (standard Streamlit behavior)
+                    if hasattr(raw_creds, "to_dict"):
+                        creds_info = raw_creds.to_dict()
+                    elif isinstance(raw_creds, dict):
+                        creds_info = raw_creds
+                    # If the user pasted the JSON string itself inside the field
+                    elif isinstance(raw_creds, str):
+                        try:
+                            creds_info = json.loads(raw_creds)
+                        except:
+                            creds_info = {"private_key": raw_creds} # Just in case
+                
                 # Option B: Individual keys pasted without header
                 elif "private_key" in st.secrets:
-                    creds_info = {
-                        "type": st.secrets.get("type", "service_account"),
-                        "project_id": st.secrets.get("project_id"),
-                        "private_key_id": st.secrets.get("private_key_id"),
-                        "private_key": st.secrets.get("private_key"),
-                        "client_email": st.secrets.get("client_email"),
-                        "client_id": st.secrets.get("client_id"),
-                        "auth_uri": st.secrets.get("auth_uri"),
-                        "token_uri": st.secrets.get("token_uri"),
-                        "auth_provider_x509_cert_url": st.secrets.get("auth_provider_x509_cert_url"),
-                        "client_x509_cert_url": st.secrets.get("client_x509_cert_url")
-                    }
+                    creds_info = dict(st.secrets)
             except Exception as e:
                 print(f"DEBUG: st.secrets access failed: {e}")
 
