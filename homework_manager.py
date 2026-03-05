@@ -67,14 +67,13 @@ class HomeworkManager:
 
             # Validation & Connection
             try:
-                if not creds_info or not creds_info.get("private_key"):
-                    raise ValueError("No valid Google Sheets credentials found. Please check Secrets or service_account.json.")
-
-                # Extra safety: check for required fields specifically
-                required_fields = ["project_id", "private_key", "client_email"]
-                missing = [f for f in required_fields if not creds_info.get(f)]
+                # Extra safety: filter out None values and check for required fields specifically
+                creds_info = {k: v for k, v in creds_info.items() if v is not None}
+                
+                required_fields = ["project_id", "private_key", "client_email", "private_key_id"]
+                missing = [f for f in required_fields if f not in creds_info or not creds_info.get(f)]
                 if missing:
-                    raise ValueError(f"Missing required credential fields: {', '.join(missing)}")
+                    raise ValueError(f"Missing required credential fields in Secrets: {', '.join(missing)}. Please verify your service_account.json content is correctly pasted into Streamlit Secrets.")
 
                 creds = service_account.Credentials.from_service_account_info(
                     creds_info, scopes=self.scope
