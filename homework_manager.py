@@ -52,18 +52,23 @@ class HomeworkManager:
                 if not creds_info:
                     raise ValueError("Credentials not found in st.secrets or service_account.json")
 
-                # Robust fix for the PEM error: ensure private_key is clean
-                if isinstance(creds_info, (dict, st.secrets.SecretBox)) or hasattr(creds_info, "get"):
-                    # We need a mutable dict to fix the key
-                    creds_dict = {k: creds_info[k] for k in creds_info.keys()}
-                    k = creds_dict.get("private_key", "")
-                    if isinstance(k, str):
-                        # Convert literal '\n' and ensure it ends with a newline
-                        creds_dict["private_key"] = k.replace("\\n", "\n").strip() + "\n"
-                    creds_info = creds_dict
+                # Convert to plain dict to avoid any Streamlit internal class issues
+                creds_dict = {}
+                try:
+                    # If it's a Streamlit Secrets object, convert to dict
+                    if hasattr(creds_info, "to_dict"):
+                        creds_dict = creds_info.to_dict()
+                    else:
+                        creds_dict = dict(creds_info)
+                except:
+                    creds_dict = creds_info # Fallback if already a dict
+
+                # Just in case, fix escaped newlines if they exist
+                if isinstance(creds_dict.get("private_key"), str):
+                    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
 
                 creds = service_account.Credentials.from_service_account_info(
-                    creds_info, scopes=self.scope
+                    creds_dict, scopes=self.scope
                 )
                 self.client = gspread.authorize(creds)
                 self.sheet = self.client.open(self.sheet_name).get_worksheet(0)

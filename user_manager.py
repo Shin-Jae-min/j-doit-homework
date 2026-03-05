@@ -71,25 +71,27 @@ class UserManager:
 
             # Validation & Connection
             try:
-                if not creds_info or not creds_info.get("private_key"):
-                    logging.warning("User Manager: No credentials found for Google Sheets.")
+                if not creds_info:
+                    logging.warning("User Manager: No credentials found.")
                     return
                 
-                required_fields = ["project_id", "private_key", "client_email"]
-                missing = [f for f in required_fields if not creds_info.get(f)]
-                if missing:
-                    logging.error(f"User Manager: Missing credential fields: {', '.join(missing)}")
-                    return
+                # Convert to plain dict
+                creds_dict = {}
+                try:
+                    if hasattr(creds_info, "to_dict"):
+                        creds_dict = creds_info.to_dict()
+                    else:
+                        creds_dict = dict(creds_info)
+                except:
+                    creds_dict = creds_info
 
-                # Auto-fix for common Streamlit Secrets newline escaping issue
-                if "private_key" in creds_info and isinstance(creds_info["private_key"], str):
-                    creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
+                if isinstance(creds_dict.get("private_key"), str):
+                    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
 
                 creds = service_account.Credentials.from_service_account_info(
-                    creds_info, scopes=self.scope
+                    creds_dict, scopes=self.scope
                 )
                 self.client = gspread.authorize(creds)
-                # Open the 'Users' worksheet
                 self.sheet = self.client.open(self.sheet_name).worksheet("Users")
             except Exception as e:
                 logging.error(f"User Manager connection failed: {e}")
