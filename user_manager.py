@@ -81,6 +81,10 @@ class UserManager:
                     logging.error(f"User Manager: Missing credential fields: {', '.join(missing)}")
                     return
 
+                # Auto-fix for common Streamlit Secrets newline escaping issue
+                if "private_key" in creds_info and isinstance(creds_info["private_key"], str):
+                    creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
+
                 creds = service_account.Credentials.from_service_account_info(
                     creds_info, scopes=self.scope
                 )

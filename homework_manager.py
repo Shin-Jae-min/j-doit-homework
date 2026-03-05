@@ -76,6 +76,10 @@ class HomeworkManager:
                 if missing:
                     raise ValueError(f"Missing required credential fields in Secrets: {', '.join(missing)}. Please verify your service_account.json content is correctly pasted into Streamlit Secrets.")
 
+                # Auto-fix for common Streamlit Secrets newline escaping issue
+                if "private_key" in creds_info and isinstance(creds_info["private_key"], str):
+                    creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
+
                 creds = service_account.Credentials.from_service_account_info(
                     creds_info, scopes=self.scope
                 )
